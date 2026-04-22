@@ -1,19 +1,50 @@
-from urllib.parse import urlparse,urlencode,parse_qs,urlunparse
-UTM_PARAMS={"utm_source","utm_medium","utm_campaign","utm_term","utm_content"}
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
-whitelist={
-    "youtube.com":{"t","v","list"},
-           "youtu.be":{"t"}
-           }
+
+TRACKING_PARAMS = {
+    "fbclid", "gclid", "igshid", "mc_cid", "mc_eid"
+}
+
+
+WHITELIST = {
+    "youtube.com": {"v", "t", "list"},
+    "youtu.be": {"t"},
+    "google.com": {"q"}  
+}
+
+def normalize_domain(netloc):
+    netloc = netloc.split(":")[0]
+    parts = netloc.split(".")
+    return ".".join(parts[-2:])
+
+def is_tracking_param(key):
+    return key.startswith("utm_") or key.lower() in TRACKING_PARAMS
+
 def clean_url(url):
-    parsed=urlparse(url)
-    domain=parsed.netloc.replace("www.","")
-    safe_keys=whitelist.get(domain,set())
-    params=parse_qs(parsed.query)
-    clean_params={
-        k:v for k,v in params.items() if k not in UTM_PARAMS or k in safe_keys      
-    }
-    new_query = urlencode(clean_params,doseq=True) #doseq parameter to arrange or convert list(multiple data) in url 
-    #join all parts of url back
-    clean=urlunparse((parsed.scheme,domain,parsed.path,"",new_query,"")) #urlunnparse take single argument -tuple so (())   
-    return clean
+    parsed = urlparse(url)
+    domain = normalize_domain(parsed.netloc)
+
+    params = parse_qs(parsed.query, keep_blank_values=True)
+
+    whitelist_keys = WHITELIST.get(domain)
+    clean_params = {}
+
+    for k, v in params.items():
+
+        if is_tracking_param(k):
+            continue
+
+        if whitelist_keys is not None:
+            if k in whitelist_keys:
+                clean_params[k] = v
+        else:
+            clean_params[k] = v
+
+    return urlunparse((
+        parsed.scheme,
+        parsed.netloc,
+        parsed.path,
+        "",
+        urlencode(clean_params, doseq=True),
+        ""
+    ))
